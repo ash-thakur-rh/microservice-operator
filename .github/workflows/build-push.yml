@@ -1,0 +1,205 @@
+name: Build and Push Operator Image
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Triggers
+# ──────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [main]
+    tags:     ['v*.*.*']        # semantic version tags, e.g. v1.2.3
+  pull_request:
+    branches: [main]            # PRs: build + test only, no push
+
+# Cancel any in-progress run on the same branch/PR when a new one is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Global env
+# ──────────────────────────────────────────────────────────────────────────────
+env:
+  REGISTRY:   ghcr.io
+  # ghcr.io/<owner>/<repo>  e.g. ghcr.io/myorg/microservice-operator
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/microservice-operator
+
+jobs:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 1 — Build fat JAR, generate CRD, run tests
+  # Runs on every push and every PR — gives fast feedback without touching the registry.
+  # ────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven          # caches ~/.m2 between runs — speeds up subsequent builds
+
+      - name: Build fat JAR and generate CRD
+        # maven-shade-plugin packages all deps into a single executable JAR.
+        # crd-generator-maven-plugin writes the CRD YAML to
+        #   target/classes/META-INF/fabric8/microservices.example.io-v1.yml
+        run: mvn --no-transfer-progress package -DskipTests
+
+      - name: Run unit tests
+        run: mvn --no-transfer-progress test
+
+      - name: Upload CRD as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crd-${{ github.sha }}
+          path: target/classes/META-INF/fabric8/microservices.example.io-v1.yml
+          retention-days: 30
+
+      - name: Upload fat JAR as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-jar-${{ github.sha }}
+          path: target/microservice-operator-*.jar
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 2 — Build image with JKube and push to ghcr.io
+  # Runs only on push to main and on version tags — never on pull requests.
+  # ────────────────────────────────────────────────────────────────────────────
+  push-image:
+    name: Push Image
+    runs-on: ubuntu-latest
+    needs: build
+    # Only push when merging to main or pushing a version tag — not on PRs
+    if: github.event_name != 'pull_request'
+
+    permissions:
+      contents: read
+      packages: write   # required to push to ghcr.io
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+
+      # docker/metadata-action generates all the image tags we want:
+      #   on main push : ghcr.io/org/microservice-operator:main
+      #                  ghcr.io/org/microservice-operator:<short-sha>
+      #   on v1.2.3 tag: ghcr.io/org/microservice-operator:1.2.3
+      #                  ghcr.io/org/microservice-operator:1.2
+      #                  ghcr.io/org/microservice-operator:latest
+      - name: Generate image tags and OCI labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=,suffix=,format=short
+          labels: |
+            org.opencontainers.image.title=Microservice Operator
+            org.opencontainers.image.description=Java Operator SDK operator managing a full microservice stack on Kubernetes/OpenShift
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build fat JAR and generate CRD
+        run: mvn --no-transfer-progress package -DskipTests
+
+      # JKube reads Docker credentials from ~/.docker/config.json (populated above).
+      # We pass the primary tag to k8s:build, then Docker-tag the remaining tags
+      # and push them directly — JKube doesn't support multi-tag natively.
+      - name: Build operator image with JKube (k8s:build)
+        run: |
+          PRIMARY_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+          echo "Building image: ${PRIMARY_TAG}"
+          mvn --no-transfer-progress k8s:build \
+            -Djkube.image.name="${PRIMARY_TAG}"
+
+      - name: Push primary image tag to ghcr.io (k8s:push)
+        run: |
+          PRIMARY_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+          echo "Pushing image: ${PRIMARY_TAG}"
+          mvn --no-transfer-progress k8s:push \
+            -Djkube.image.name="${PRIMARY_TAG}"
+
+      - name: Tag and push remaining image tags
+        run: |
+          PRIMARY_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+          # Skip first line (already pushed), tag and push the rest
+          tail -n +2 <<< "${{ steps.meta.outputs.tags }}" | while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "Tagging and pushing: ${tag}"
+            docker tag "${PRIMARY_TAG}" "${tag}"
+            docker push "${tag}"
+          done
+
+      - name: Print image digest
+        run: |
+          echo "Image pushed successfully."
+          echo "Tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 3 — Create GitHub Release on version tag
+  # Attaches the CRD YAML and operator.yaml to the release so users can apply
+  # them directly without building from source.
+  # ────────────────────────────────────────────────────────────────────────────
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: push-image
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write   # required to create a GitHub Release
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+
+      - name: Build to generate CRD
+        run: mvn --no-transfer-progress package -DskipTests
+
+      # Patch the operator.yaml image tag to match the release version before attaching
+      - name: Set release image tag in operator.yaml
+        run: |
+          VERSION="${{ github.ref_name }}"           # e.g. v1.2.3
+          SEM="${VERSION#v}"                          # strip leading 'v' → 1.2.3
+          sed -i "s|image: quay.io/yourorg/microservice-operator:.*|image: ${{ env.IMAGE_NAME }}:${SEM}|" \
+            k8s/operator.yaml
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            target/classes/META-INF/fabric8/microservices.example.io-v1.yml
+            k8s/operator.yaml
+            k8s/microservice-sample.yaml
