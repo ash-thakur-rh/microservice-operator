@@ -207,11 +207,23 @@
                   (from maven-shade-plugin), picks eclipse-temurin:17 as the base,
                   copies the JAR to /deployments, and sets the correct entrypoint.
                 -->
-                <from>eclipse-temurin:17-jre-alpine</from>
+                <from>registry.access.redhat.com/ubi8/openjdk-17:latest</from>
                 <assembly>
-                  <!-- 'artifact' copies the project's main artifact (the shaded fat JAR) -->
+                  <!-- copies the project's main artifact (the shaded fat JAR) -->
                   <targetDir>/deployments</targetDir>
-                  <descriptorRef>artifact</descriptorRef>
+                  <layers>
+                    <layer>
+                      <fileSets>
+                        <fileSet>
+                          <directory>${project.build.directory}</directory>
+                          <includes>
+                            <include>${project.artifactId}-${project.version}.jar</include>
+                          </includes>
+                          <outputDirectory>.</outputDirectory>
+                        </fileSet>
+                      </fileSets>
+                    </layer>
+                  </layers>
                 </assembly>
                 <env>
                   <JAVA_APP_JAR>${project.artifactId}-${project.version}.jar</JAVA_APP_JAR>
@@ -258,7 +270,19 @@
                 <from>registry.access.redhat.com/ubi8/openjdk-17:latest</from>
                 <assembly>
                   <targetDir>/deployments</targetDir>
-                  <descriptorRef>artifact</descriptorRef>
+                  <layers>
+                    <layer>
+                      <fileSets>
+                        <fileSet>
+                          <directory>${project.build.directory}</directory>
+                          <includes>
+                            <include>${project.artifactId}-${project.version}.jar</include>
+                          </includes>
+                          <outputDirectory>.</outputDirectory>
+                        </fileSet>
+                      </fileSets>
+                    </layer>
+                  </layers>
                 </assembly>
                 <env>
                   <JAVA_APP_JAR>${project.artifactId}-${project.version}.jar</JAVA_APP_JAR>

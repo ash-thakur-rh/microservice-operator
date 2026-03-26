@@ -35,10 +35,10 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: temurin
@@ -54,14 +54,14 @@ jobs:
         run: mvn --no-transfer-progress test
 
       - name: Upload CRD as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: crd-${{ github.sha }}
           path: target/classes/META-INF/fabric8/microservices.example.io-v1.yml
           retention-days: 30
 
       - name: Upload fat JAR as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: operator-jar-${{ github.sha }}
           path: target/microservice-operator-*.jar
@@ -84,10 +84,10 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: temurin
@@ -175,10 +175,10 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: temurin
