@@ -46,7 +46,7 @@ metadata:
   name: petclinic-prod
   namespace: production
 spec:
-  image: docker.io/springcommunity/spring-petclinic:3.5.6
+  image: quay.io/ash-thakur/spring-petclinic:4.0.3-arm64
   replicas: 2
   containerPort: 8080
   livenessPath: /actuator/health/liveness
@@ -73,7 +73,7 @@ spec:
   autoscaling:
     minReplicas: 2
     maxReplicas: 8
-    targetCPUUtilizationPercentage: 65
+    targetCPUUtilizationPercentage: 20
 
   exposed: true
   hostname: petclinic.apps.apps-crc.testing
