@@ -1,0 +1,58 @@
+---
+# Example 1 — minimal: just an image, operator supplies sensible defaults
+apiVersion: example.io/v1
+kind: MicroService
+metadata:
+  name: hello-service
+  namespace: default
+spec:
+  image: quay.io/bitnami/nginx:latest
+  replicas: 1
+  containerPort: 8080
+
+---
+# Example 2 — full-featured: autoscaling, external exposure, secrets, resource limits
+apiVersion: example.io/v1
+kind: MicroService
+metadata:
+  name: payment-service
+  namespace: production
+spec:
+  image: quay.io/acme/payment-service:2.1.0
+  replicas: 2
+  containerPort: 8080
+
+  # Key/value app config mounted into the container as env vars via a ConfigMap
+  config:
+    LOG_LEVEL: INFO
+    JAVA_OPTS: "-Xms256m -Xmx512m"
+    DB_URL: "jdbc:postgresql://postgres.production.svc.cluster.local:5432/payments"
+    CACHE_TTL_SECONDS: "300"
+
+  # Horizontal Pod Autoscaler — scales between 2–10 pods when CPU hits 60 %
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 60
+
+  # Expose the service through an Ingress (or Route on OpenShift)
+  exposed: true
+  hostname: payment.apps.mycluster.example.com
+
+  # Resource sizing
+  resources:
+    requestsCpu: "250m"
+    requestsMemory: "256Mi"
+    limitsCpu: "1"
+    limitsMemory: "1Gi"
+
+  # Secrets injected as environment variables (must exist in the same namespace)
+  envFromSecrets:
+    - payment-db-credentials
+    - payment-jwt-secret
+
+  # Extra labels applied to all owned resources (useful for cost allocation, etc.)
+  extraLabels:
+    team: payments
+    cost-center: "cc-42"
+    environment: production

@@ -1,0 +1,120 @@
+---
+# Namespace for the operator itself (optional — adjust as needed)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: microservice-operator-system
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: microservice-operator
+  namespace: microservice-operator-system
+
+---
+# ClusterRole — broad permissions needed to manage MicroService CRs and all owned resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: microservice-operator
+rules:
+  - apiGroups: ["example.io"]
+    resources: ["microservices", "microservices/status", "microservices/finalizers"]
+    verbs: ["*"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "pods"]
+    verbs: ["*"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["*"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["*"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  # OpenShift Route support
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["*"]
+  # Leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: microservice-operator
+subjects:
+  - kind: ServiceAccount
+    name: microservice-operator
+    namespace: microservice-operator-system
+roleRef:
+  kind: ClusterRole
+  name: microservice-operator
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microservice-operator
+  namespace: microservice-operator-system
+  labels:
+    app: microservice-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: microservice-operator
+  template:
+    metadata:
+      labels:
+        app: microservice-operator
+    spec:
+      serviceAccountName: microservice-operator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: operator
+          image: microservice-operator:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: probe
+          startupProbe:
+            httpGet:
+              path: /startup
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
