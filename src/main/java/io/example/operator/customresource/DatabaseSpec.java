@@ -14,8 +14,11 @@ package io.example.operator.customresource;
  */
 public class DatabaseSpec {
 
-  /** PostgreSQL container image. Defaults to the official Docker Hub image. */
-  private String image = "docker.io/postgres:15-alpine";
+  /** PostgreSQL container image. Defaults to the Red Hat UBI image, which supports
+   *  arbitrary UIDs and works on both OpenShift and vanilla Kubernetes.
+   *  For vanilla Kubernetes you may override with docker.io/postgres:15-alpine,
+   *  but note that image uses POSTGRES_* env vars instead of POSTGRESQL_*. */
+  private String image = "registry.access.redhat.com/rhel9/postgresql-15:9.7";
 
   /** Name of the database to create inside PostgreSQL. */
   private String databaseName = "appdb";

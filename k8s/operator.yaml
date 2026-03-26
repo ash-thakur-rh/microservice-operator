@@ -97,7 +97,7 @@ spec:
           #   mvn package k8s:build k8s:push -Djkube.image.name=quay.io/yourorg/microservice-operator:1.0.0
           # or for OpenShift S2I:
           #   mvn package oc:build -Djkube.image.name=microservice-operator:1.0.0
-          image: ghcr.io/ash-thakur-rh/microservice-operator:184d1d1
+          image: ghcr.io/ash-thakur-rh/microservice-operator:a255152
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -106,9 +106,9 @@ spec:
             httpGet:
               path: /startup
               port: 8080
-            initialDelaySeconds: 2
-            periodSeconds: 3
-            failureThreshold: 10
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 24
           livenessProbe:
             httpGet:
               path: /healthz
@@ -118,10 +118,10 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: "100m"
+              cpu: "250m"
               memory: "256Mi"
             limits:
-              cpu: "500m"
+              cpu: "1"
               memory: "512Mi"
           securityContext:
             allowPrivilegeEscalation: false

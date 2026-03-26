@@ -27,13 +27,15 @@ import static io.example.operator.MicroServiceUtils.*;
  * in both the StatefulSet and the Deployment is enough to wire everything up.
  *
  * <pre>
- * Secret keys injected into the application:
- *   POSTGRES_DB                — database name
- *   POSTGRES_USER              — username
- *   POSTGRES_PASSWORD          — auto-generated password
+ * Secret keys injected into the database container (Red Hat UBI postgresql image):
+ *   POSTGRESQL_DATABASE        — database name
+ *   POSTGRESQL_USER            — username
+ *   POSTGRESQL_PASSWORD        — auto-generated password
+ *
+ * Secret keys injected into the application container:
  *   SPRING_DATASOURCE_URL      — jdbc:postgresql://&lt;db-svc&gt;:5432/&lt;dbname&gt;
- *   SPRING_DATASOURCE_USERNAME — same as POSTGRES_USER
- *   SPRING_DATASOURCE_PASSWORD — same as POSTGRES_PASSWORD
+ *   SPRING_DATASOURCE_USERNAME — same as POSTGRESQL_USER
+ *   SPRING_DATASOURCE_PASSWORD — same as POSTGRESQL_PASSWORD
  * </pre>
  */
 public class DatabaseSecretDependentResource
@@ -48,7 +50,7 @@ public class DatabaseSecretDependentResource
     // Preserve the password across reconcile loops — only generate once.
     String password = context.getSecondaryResource(Secret.class)
         .map(Secret::getData)
-        .map(data -> data.get("POSTGRES_PASSWORD"))
+        .map(data -> data.get("POSTGRESQL_PASSWORD"))
         .map(b64 -> new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8))
         .orElseGet(DatabaseSecretDependentResource::generatePassword);
 
@@ -63,9 +65,9 @@ public class DatabaseSecretDependentResource
             .build())
         // stringData is base64-encoded by the API server automatically
         .withStringData(Map.of(
-            "POSTGRES_DB",                db.getDatabaseName(),
-            "POSTGRES_USER",              db.getUsername(),
-            "POSTGRES_PASSWORD",          password,
+            "POSTGRESQL_DATABASE",        db.getDatabaseName(),
+            "POSTGRESQL_USER",            db.getUsername(),
+            "POSTGRESQL_PASSWORD",        password,
             "SPRING_DATASOURCE_URL",      jdbcUrl,
             "SPRING_DATASOURCE_USERNAME", db.getUsername(),
             "SPRING_DATASOURCE_PASSWORD", password))

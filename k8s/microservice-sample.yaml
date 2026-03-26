@@ -14,7 +14,7 @@ metadata:
   name: petclinic
   namespace: default
 spec:
-  image: docker.io/springcommunity/spring-petclinic:latest
+  image: docker.io/springcommunity/spring-petclinic:3.5.6
   replicas: 1
   containerPort: 8080
   livenessPath: /actuator/health/liveness
@@ -46,7 +46,7 @@ metadata:
   name: petclinic-prod
   namespace: production
 spec:
-  image: docker.io/springcommunity/spring-petclinic:latest
+  image: docker.io/springcommunity/spring-petclinic:3.5.6
   replicas: 2
   containerPort: 8080
   livenessPath: /actuator/health/liveness
@@ -54,7 +54,7 @@ spec:
 
   # Operator-provisioned PostgreSQL
   database:
-    image: docker.io/postgres:15-alpine
+    image: registry.access.redhat.com/rhel9/postgresql-15:9.7
     databaseName: petclinicdb
     username: petclinic
     storageSize: 5Gi
