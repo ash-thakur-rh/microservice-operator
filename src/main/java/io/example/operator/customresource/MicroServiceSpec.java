@@ -46,6 +46,14 @@ public class MicroServiceSpec {
   private List<String> envFromSecrets;
 
   /**
+   * Optional database configuration. When present, the operator provisions a PostgreSQL
+   * StatefulSet, a PVC, a ClusterIP Service, and a Secret with auto-generated credentials.
+   * The credentials Secret is injected into the Deployment automatically — no manual
+   * kubectl create secret needed.
+   */
+  private DatabaseSpec database;
+
+  /**
    * HTTP path for the liveness probe.
    * Default suits Spring Boot Actuator. Override for other frameworks:
    *   Quarkus / Micronaut / podinfo : /q/health/live  (Quarkus), /health/live (Micronaut)
@@ -98,4 +106,7 @@ public class MicroServiceSpec {
 
   public String getReadinessPath() { return readinessPath; }
   public void setReadinessPath(String readinessPath) { this.readinessPath = readinessPath; }
+
+  public DatabaseSpec getDatabase() { return database; }
+  public void setDatabase(DatabaseSpec database) { this.database = database; }
 }

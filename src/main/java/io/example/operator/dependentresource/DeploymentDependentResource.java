@@ -43,7 +43,19 @@ public class DeploymentDependentResource
             .build())
         .build());
 
-    // Mount any referenced secrets as env sources
+    // When the operator manages a database, inject the auto-generated credentials secret.
+    // This supplies SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+    // automatically — no manual kubectl create secret required.
+    if (spec.getDatabase() != null) {
+      envFromSources.add(new EnvFromSourceBuilder()
+          .withSecretRef(new SecretEnvSourceBuilder()
+              .withName(dbSecretName(ms))
+              .withOptional(false) // fail fast if secret is missing
+              .build())
+          .build());
+    }
+
+    // Mount any additional user-managed secrets as env sources
     if (spec.getEnvFromSecrets() != null) {
       for (String secretName : spec.getEnvFromSecrets()) {
         envFromSources.add(new EnvFromSourceBuilder()

@@ -23,10 +23,11 @@ rules:
     resources: ["microservices", "microservices/status", "microservices/finalizers"]
     verbs: ["*"]
   - apiGroups: ["apps"]
-    resources: ["deployments"]
+    resources: ["deployments", "statefulsets"]
     verbs: ["*"]
   - apiGroups: [""]
-    resources: ["services", "configmaps", "pods"]
+    resources: ["services", "configmaps", "pods", "secrets",
+                "persistentvolumeclaims"]
     verbs: ["*"]
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]

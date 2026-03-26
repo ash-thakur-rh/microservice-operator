@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import io.example.operator.customresource.MicroService;
 import io.example.operator.customresource.MicroServiceStatus;
 import io.example.operator.customresource.MicroServiceStatus.Phase;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
 import io.example.operator.dependentresource.*;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -16,26 +17,61 @@ import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
  * Core reconciler for the MicroService custom resource.
  *
  * <p>Uses the managed-dependents workflow to keep the following resources in sync:
- * <ol>
- *   <li>ConfigMap          — application configuration as environment variables</li>
- *   <li>Deployment         — runs the container image</li>
- *   <li>Service            — internal ClusterIP routing</li>
- *   <li>HPA                — CPU-based horizontal autoscaling (conditional)</li>
- *   <li>Ingress            — external HTTP access (conditional)</li>
- * </ol>
  *
- * <p>The reconciler only writes the status subresource; all other resource mutations
- * are delegated to the dependent resources above.
+ * <pre>
+ * Always:
+ *   1. ConfigMap                  — application config as env vars
+ *
+ * When spec.database is set (operator-provisioned PostgreSQL):
+ *   2. DatabaseSecretDependentResource       — auto-generated credentials Secret
+ *   3. DatabaseHeadlessServiceDependentResource — headless Service for StatefulSet DNS
+ *   4. DatabaseServiceDependentResource      — ClusterIP Service for app → DB traffic
+ *   5. DatabaseStatefulSetDependentResource  — PostgreSQL StatefulSet + PVC
+ *
+ * Always (after ConfigMap, after DB secret if database is enabled):
+ *   6. Deployment                 — runs the microservice container
+ *   7. Service                    — ClusterIP for in-cluster traffic to the app
+ *
+ * Conditional:
+ *   8. HPA                        — CPU autoscaling (when spec.autoscaling is set)
+ *   9. Ingress                    — external access (when spec.exposed: true)
+ * </pre>
+ *
+ * <p>The reconciler only writes the status subresource; all resource mutations are
+ * delegated to the dependent resources listed above.
  */
 @Workflow(
     dependents = {
+      // ── Application config ──────────────────────────────────────────────────────
       @Dependent(type = ConfigMapDependentResource.class),
+
+      // ── Operator-provisioned database (all conditional on spec.database != null) ─
+      @Dependent(
+          type = DatabaseSecretDependentResource.class,
+          reconcilePrecondition = DatabaseCondition.class),
+      @Dependent(
+          type = DatabaseHeadlessServiceDependentResource.class,
+          dependsOn = "DatabaseSecretDependentResource",
+          reconcilePrecondition = DatabaseCondition.class),
+      @Dependent(
+          type = DatabaseServiceDependentResource.class,
+          dependsOn = "DatabaseSecretDependentResource",
+          reconcilePrecondition = DatabaseCondition.class),
+      @Dependent(
+          type = DatabaseStatefulSetDependentResource.class,
+          dependsOn = {"DatabaseHeadlessServiceDependentResource",
+                       "DatabaseServiceDependentResource"},
+          reconcilePrecondition = DatabaseCondition.class),
+
+      // ── Application workload ─────────────────────────────────────────────────────
       @Dependent(
           type = DeploymentDependentResource.class,
           dependsOn = "ConfigMapDependentResource"),
       @Dependent(
           type = ServiceDependentResource.class,
           dependsOn = "DeploymentDependentResource"),
+
+      // ── Optional features ────────────────────────────────────────────────────────
       @Dependent(
           type = HorizontalPodAutoscalerDependentResource.class,
           dependsOn = "DeploymentDependentResource",
@@ -63,8 +99,17 @@ public class MicroServiceReconciler implements Reconciler<MicroService>, Cleaner
         .map(d -> d.getStatus() != null ? d.getStatus().getReadyReplicas() : 0)
         .orElse(0);
 
+    // If a database is managed, it must have at least one ready replica before we report RUNNING
+    boolean dbReady = true;
+    if (ms.getSpec().getDatabase() != null) {
+      int dbReadyReplicas = context.getSecondaryResource(StatefulSet.class)
+          .map(s -> s.getStatus() != null ? s.getStatus().getReadyReplicas() : 0)
+          .orElse(0);
+      dbReady = dbReadyReplicas >= 1;
+    }
+
     int desired = ms.getSpec().getReplicas();
-    Phase phase = (readyReplicas >= desired) ? Phase.RUNNING : Phase.PENDING;
+    Phase phase = (dbReady && readyReplicas >= desired) ? Phase.RUNNING : Phase.PENDING;
 
     MicroService statusPatch = buildStatusPatch(ms, phase, readyReplicas);
     return UpdateControl.patchStatus(statusPatch);

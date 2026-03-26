@@ -27,17 +27,22 @@ application stack from a single Custom Resource.
 ## Overview
 
 The MicroService Operator watches `MicroService` custom resources and ensures that everything
-needed to run the described service exists in the cluster:
+needed to run the described service exists in the cluster — including its database.
 
-| Kubernetes resource          | When created                  | What it does                                    |
-|------------------------------|-------------------------------|--------------------------------------------------|
-| `ConfigMap`                  | Always                        | Holds `spec.config` key/values as env vars       |
-| `Deployment`                 | Always                        | Runs the container image                         |
-| `Service`                    | Always                        | ClusterIP routing to pods                        |
-| `HorizontalPodAutoscaler`    | When `spec.autoscaling` is set| CPU-driven pod scaling                           |
-| `Ingress` (or Route)         | When `spec.exposed: true`     | External HTTP/HTTPS access                       |
+| Kubernetes resource             | When created                       | What it does                                         |
+|---------------------------------|------------------------------------|------------------------------------------------------|
+| `ConfigMap`                     | Always                             | Holds `spec.config` key/values as env vars           |
+| `Secret`                        | When `spec.database` is set        | Auto-generated DB credentials (operator-owned)       |
+| `Service` (headless)            | When `spec.database` is set        | Stable pod DNS for the StatefulSet                   |
+| `Service` (ClusterIP, DB)       | When `spec.database` is set        | App → database connectivity                          |
+| `StatefulSet` + `PVC`           | When `spec.database` is set        | PostgreSQL database with persistent storage          |
+| `Deployment`                    | Always                             | Runs the microservice container                      |
+| `Service` (ClusterIP, app)      | Always                             | In-cluster routing to the app pods                   |
+| `HorizontalPodAutoscaler`       | When `spec.autoscaling` is set     | CPU-driven pod scaling                               |
+| `Ingress` (or Route)            | When `spec.exposed: true`          | External HTTP/HTTPS access                           |
 
 All owned resources are garbage-collected automatically when the `MicroService` CR is deleted.
+Database PVCs survive StatefulSet deletion by design — your data is not lost when you update the CR.
 
 ---
 
@@ -65,6 +70,60 @@ All owned resources are garbage-collected automatically when the `MicroService` 
 │  Status updated after each reconcile loop                    │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Database Support
+
+The operator can provision and manage a PostgreSQL database as part of the same CR.
+You declare what you want — the operator does the rest.
+
+### What the operator creates automatically
+
+```
+spec.database present
+       │
+       ├── Secret  <name>-db-secret          ← auto-generated password, never rotated without intent
+       ├── Service <name>-db-headless         ← ClusterIP: None  (required by StatefulSet)
+       ├── Service <name>-db                  ← ClusterIP  (app connects here)
+       └── StatefulSet <name>-db
+               └── PVC  data-<name>-db-0     ← persists across pod restarts and StatefulSet updates
+```
+
+The generated `Secret` contains both the PostgreSQL server variables and the Spring Boot
+Datasource variables so the app pod needs only a single `envFrom` reference:
+
+| Key | Value |
+|-----|-------|
+| `POSTGRES_DB` | value of `spec.database.databaseName` |
+| `POSTGRES_USER` | value of `spec.database.username` |
+| `POSTGRES_PASSWORD` | **auto-generated** 32-char random string |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://<name>-db:5432/<databaseName>` |
+| `SPRING_DATASOURCE_USERNAME` | same as `POSTGRES_USER` |
+| `SPRING_DATASOURCE_PASSWORD` | same as `POSTGRES_PASSWORD` |
+
+### No manual secret creation
+
+```yaml
+# Before (manual)
+kubectl create secret generic my-db-credentials \
+  --from-literal=SPRING_DATASOURCE_URL=jdbc:postgresql://... \
+  --from-literal=SPRING_DATASOURCE_USERNAME=user \
+  --from-literal=SPRING_DATASOURCE_PASSWORD=s3cr3t
+
+# After (operator-managed) — just add this to your CR:
+spec:
+  database:
+    databaseName: myappdb
+    username: myuser
+    storageSize: 5Gi
+```
+
+### Disabling the database
+
+Remove the `spec.database` block and re-apply. The operator deletes the StatefulSet,
+Services, and Secret. The **PVC is not deleted** — your data is preserved.
+To reclaim storage, delete the PVC manually after verifying you no longer need the data.
 
 ---
 
@@ -214,16 +273,26 @@ spec:
   # Mounted into the container as environment variables via a ConfigMap.
   # Spring Boot reads SPRING_* and SERVER_* env vars automatically.
   config:
-    SPRING_PROFILES_ACTIVE: production
+    SPRING_PROFILES_ACTIVE: postgresql,production
+    SPRING_JPA_OPEN_IN_VIEW: "false"
     LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: WARN
-    DB_URL: "jdbc:postgresql://postgres:5432/payments"
 
-  # ── Secrets ───────────────────────────────────────────────
-  # Existing secrets injected as environment variables (envFrom).
-  # Secrets must exist in the same namespace; missing secrets are tolerated (optional=true).
+  # ── Operator-managed database ──────────────────────────────
+  # When present the operator provisions PostgreSQL automatically.
+  # Omit this block to use an external database or an in-memory DB.
+  database:
+    image: docker.io/postgres:15-alpine   # any compatible PostgreSQL image
+    databaseName: petclinicdb             # name of the database to create
+    username: petclinic                   # PostgreSQL username
+    storageSize: 5Gi                      # PVC size (immutable after first apply)
+    # storageClass: gp3                   # omit to use the cluster default StorageClass
+
+  # ── User-managed secrets ──────────────────────────────────
+  # Additional pre-existing secrets injected as env vars (envFrom).
+  # Missing secrets are tolerated (optional=true).
+  # Note: the database credentials secret is injected automatically — do NOT list it here.
   envFromSecrets:
-    - payment-db-credentials
-    - payment-jwt-secret
+    - app-api-keys
 
   # ── Autoscaling ───────────────────────────────────────────
   # Omit this block entirely to disable autoscaling and delete any existing HPA.
@@ -531,7 +600,8 @@ spec:
     complete running application stack on Kubernetes and OpenShift.
 
     ## Features
-    - Manages Deployment, Service, ConfigMap, HPA, and Ingress from one CR
+    - Full application stack from one CR: ConfigMap, Deployment, Service, HPA, Ingress
+    - Operator-provisioned PostgreSQL: StatefulSet + PVC + auto-generated credentials Secret
     - CPU-based horizontal autoscaling via HPA v2
     - External exposure toggle (Ingress / OpenShift Route)
     - Status reporting: phase, readyReplicas, URL, observedGeneration
