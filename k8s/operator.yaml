@@ -97,7 +97,7 @@ spec:
           #   mvn package k8s:build k8s:push -Djkube.image.name=quay.io/yourorg/microservice-operator:1.0.0
           # or for OpenShift S2I:
           #   mvn package oc:build -Djkube.image.name=microservice-operator:1.0.0
-          image: ghcr.io/ash-thakur-rh/microservice-operator:a255152
+          image: ghcr.io/ash-thakur-rh/microservice-operator:f45d3a0
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

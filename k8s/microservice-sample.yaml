@@ -54,7 +54,7 @@ spec:
 
   # Operator-provisioned PostgreSQL
   database:
-    image: registry.access.redhat.com/rhel9/postgresql-15:9.7
+    image: quay.io/sclorg/postgresql-15-c9s:latest
     databaseName: petclinicdb
     username: petclinic
     storageSize: 5Gi
@@ -79,9 +79,9 @@ spec:
   hostname: petclinic.apps.apps-crc.testing
 
   resources:
-    requestsCpu: "250m"
+    requestsCpu: "500m"
     requestsMemory: "512Mi"
-    limitsCpu: "1"
+    limitsCpu: "2"
     limitsMemory: "1Gi"
 
   extraLabels:

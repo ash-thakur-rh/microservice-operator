@@ -119,10 +119,10 @@ public class DatabaseStatefulSetDependentResource
                         .withReadinessProbe(readinessProbe)
                         .withNewResources()
                             .withRequests(Map.of(
-                                "cpu",    new Quantity("100m"),
+                                "cpu",    new Quantity("250m"),
                                 "memory", new Quantity("256Mi")))
                             .withLimits(Map.of(
-                                "cpu",    new Quantity("500m"),
+                                "cpu",    new Quantity("1"),
                                 "memory", new Quantity("512Mi")))
                         .endResources()
                     .endContainer()

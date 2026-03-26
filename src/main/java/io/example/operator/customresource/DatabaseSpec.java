@@ -18,7 +18,7 @@ public class DatabaseSpec {
    *  arbitrary UIDs and works on both OpenShift and vanilla Kubernetes.
    *  For vanilla Kubernetes you may override with docker.io/postgres:15-alpine,
    *  but note that image uses POSTGRES_* env vars instead of POSTGRESQL_*. */
-  private String image = "registry.access.redhat.com/rhel9/postgresql-15:9.7";
+  private String image = "quay.io/sclorg/postgresql-15-c9s:latest";
 
   /** Name of the database to create inside PostgreSQL. */
   private String databaseName = "appdb";
