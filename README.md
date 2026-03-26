@@ -51,7 +51,7 @@ Database PVCs survive StatefulSet deletion by design — your data is not lost w
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  User                                                        │
-│  kubectl apply -f petclinic-rest.yaml                        │
+│  kubectl apply -f petclinic.yaml                             │
 └──────────────────────┬──────────────────────────────────────┘
                        │  MicroService CR
                        ▼
@@ -192,6 +192,13 @@ INFO  io.javaoperatorsdk.operator.Operator - Registered reconciler: 'microservic
 kubectl apply -f k8s/microservice-sample.yaml
 ```
 
+Open the PetClinic UI in your browser (port-forward for local access):
+
+```bash
+kubectl port-forward svc/petclinic 8080:80 -n default
+# Open http://localhost:8080
+```
+
 Check the status:
 
 ```bash
@@ -241,21 +248,24 @@ The `Ingress` is deleted automatically.
 apiVersion: example.io/v1
 kind: MicroService
 metadata:
-  name: petclinic-rest         # becomes the name of all owned resources
+  name: petclinic              # becomes the name of all owned resources
   namespace: production
 spec:
 
   # ── Required ──────────────────────────────────────────────
-  # Spring PetClinic REST API — real Spring Boot microservice by the Spring community.
-  # Docker Hub: https://hub.docker.com/r/springcommunity/spring-petclinic-rest
-  image: docker.io/springcommunity/spring-petclinic-rest:latest
+  # Spring PetClinic — monolithic Spring Boot app with full Thymeleaf web UI.
+  # Docker Hub : https://hub.docker.com/r/springcommunity/spring-petclinic
+  # Port       : 8080  |  UI: http://<host>/  |  REST: http://<host>/api
+  # Note: the Angular frontend (spring-petclinic-angular) has no published Docker image;
+  #       use the monolith if you want a working UI out of the box.
+  image: docker.io/springcommunity/spring-petclinic:latest
 
   # ── Scaling ───────────────────────────────────────────────
   replicas: 2                  # desired replicas (ignored by HPA when autoscaling is set)
                                # default: 1
 
   # ── Networking ────────────────────────────────────────────
-  containerPort: 9966          # Spring PetClinic REST listens on 9966 by default
+  containerPort: 8080          # Spring PetClinic default port
 
   exposed: true                # create Ingress/Route; default: false
   hostname: petclinic-api.apps.cluster.example.com   # optional; auto-derived when omitted
@@ -352,7 +362,7 @@ status:
   phase: RUNNING            # PENDING | RUNNING | DEGRADED | ERROR
   readyReplicas: 2          # ready pods observed in the Deployment
   url: "http://petclinic-api.apps.cluster.example.com"   # populated when exposed=true
-  configMapName: petclinic-rest-config
+  configMapName: petclinic-config
   message: "All replicas are ready"
   observedGeneration: 3     # CR generation when this status was last written
 ```
@@ -439,7 +449,7 @@ kubectl -n microservice-operator-system logs -f deploy/microservice-operator
 kubectl get microservice -A
 
 # Inspect all resources created for a CR
-kubectl get all,ingress,configmap,hpa -l app=petclinic-rest -n production
+kubectl get all,ingress,configmap,hpa -l app=petclinic-prod -n production
 ```
 
 ---

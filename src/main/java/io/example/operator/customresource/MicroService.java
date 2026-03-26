@@ -18,13 +18,16 @@ import io.fabric8.kubernetes.model.annotation.Version;
  *   name: petclinic-rest
  *   namespace: production
  * spec:
- *   image: docker.io/springcommunity/spring-petclinic-rest:latest
+ *   image: docker.io/springcommunity/spring-petclinic:latest
  *   replicas: 2
- *   containerPort: 9966
+ *   containerPort: 8080
  *   livenessPath: /actuator/health/liveness
  *   readinessPath: /actuator/health/readiness
  *   config:
- *     SPRING_PROFILES_ACTIVE: production
+ *     MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+ *     MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED: "true"
+ *     MANAGEMENT_HEALTH_READINESSSTATE_ENABLED: "true"
+ *     SPRING_PROFILES_ACTIVE: postgres
  *     LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: WARN
  *   autoscaling:
  *     minReplicas: 2
