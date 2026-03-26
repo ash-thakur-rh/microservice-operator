@@ -1,0 +1,17 @@
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/MicroServiceOperator.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/MicroServiceReconciler.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/MicroServiceUtils.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/customresource/AutoscalingSpec.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/customresource/MicroService.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/customresource/MicroServiceSpec.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/customresource/MicroServiceStatus.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/customresource/ResourceRequirementsSpec.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/dependentresource/AutoscalingCondition.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/dependentresource/ConfigMapDependentResource.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/dependentresource/DeploymentDependentResource.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/dependentresource/ExposedCondition.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/dependentresource/HorizontalPodAutoscalerDependentResource.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/dependentresource/IngressDependentResource.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/dependentresource/ServiceDependentResource.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/probes/LivenessHandler.java
+/Users/ashishth/IdeaProjects/microservice-operator/src/main/java/io/example/operator/probes/StartupHandler.java

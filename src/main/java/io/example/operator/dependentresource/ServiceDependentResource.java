@@ -3,6 +3,7 @@ package io.example.operator.dependentresource;
 import java.util.Map;
 
 import io.example.operator.customresource.MicroService;
+import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.ServiceBuilder;
@@ -36,7 +37,7 @@ public class ServiceDependentResource
             .addNewPort()
                 .withName("http")
                 .withPort(80)
-                .withTargetPort(port)
+                .withTargetPort(new IntOrString(port))
                 .withProtocol("TCP")
             .endPort()
             .withType("ClusterIP")
