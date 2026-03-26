@@ -43,43 +43,50 @@ import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
 @Workflow(
     dependents = {
       // ── Application config ──────────────────────────────────────────────────────
-      @Dependent(type = ConfigMapDependentResource.class),
+      @Dependent(type = ConfigMapDependentResource.class, name = "ConfigMap"),
 
       // ── Operator-provisioned database (all conditional on spec.database != null) ─
       @Dependent(
           type = DatabaseSecretDependentResource.class,
+          name = "DatabaseSecret",
           reconcilePrecondition = DatabaseCondition.class),
       @Dependent(
           type = DatabaseHeadlessServiceDependentResource.class,
-          dependsOn = "DatabaseSecretDependentResource",
+          name = "DatabaseHeadlessService",
+          dependsOn = "DatabaseSecret",
           reconcilePrecondition = DatabaseCondition.class),
       @Dependent(
           type = DatabaseServiceDependentResource.class,
-          dependsOn = "DatabaseSecretDependentResource",
+          name = "DatabaseService",
+          dependsOn = "DatabaseSecret",
           reconcilePrecondition = DatabaseCondition.class),
       @Dependent(
           type = DatabaseStatefulSetDependentResource.class,
-          dependsOn = {"DatabaseHeadlessServiceDependentResource",
-                       "DatabaseServiceDependentResource"},
+          name = "DatabaseStatefulSet",
+          dependsOn = {"DatabaseHeadlessService", "DatabaseService"},
           reconcilePrecondition = DatabaseCondition.class),
 
       // ── Application workload ─────────────────────────────────────────────────────
       @Dependent(
           type = DeploymentDependentResource.class,
-          dependsOn = "ConfigMapDependentResource"),
+          name = "Deployment",
+          dependsOn = "ConfigMap"),
       @Dependent(
           type = ServiceDependentResource.class,
-          dependsOn = "DeploymentDependentResource"),
+          name = "Service",
+          dependsOn = "Deployment"),
 
       // ── Optional features ────────────────────────────────────────────────────────
       @Dependent(
           type = HorizontalPodAutoscalerDependentResource.class,
-          dependsOn = "DeploymentDependentResource",
+          name = "HPA",
+          dependsOn = "Deployment",
           reconcilePrecondition = AutoscalingCondition.class,
           deletePostcondition = AutoscalingCondition.class),
       @Dependent(
           type = IngressDependentResource.class,
-          dependsOn = "ServiceDependentResource",
+          name = "Ingress",
+          dependsOn = "Service",
           reconcilePrecondition = ExposedCondition.class,
           deletePostcondition = ExposedCondition.class)
     })
