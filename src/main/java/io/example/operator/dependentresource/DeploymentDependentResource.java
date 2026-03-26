@@ -67,13 +67,12 @@ public class DeploymentDependentResource
             "memory", new Quantity(res.getLimitsMemory())))
         .build();
 
-    // HTTP liveness / readiness probes on the container port.
-    // Paths follow the CNCF convention used by podinfo, Quarkus, Micronaut, and many others.
-    // Spring Boot apps expose the same paths when management.endpoint.health.probes.enabled=true.
-    // Override spec.livenessPath / spec.readinessPath if your app uses different paths.
+    // HTTP liveness / readiness probes — paths come from spec so each microservice
+    // can declare its own health endpoints without changing the operator.
+    // Defaults target Spring Boot Actuator; override in the CR for other frameworks.
     Probe livenessProbe = new ProbeBuilder()
         .withHttpGet(new HTTPGetActionBuilder()
-            .withPath("/healthz")
+            .withPath(spec.getLivenessPath())
             .withPort(new IntOrString(spec.getContainerPort()))
             .build())
         .withInitialDelaySeconds(15)
@@ -83,7 +82,7 @@ public class DeploymentDependentResource
 
     Probe readinessProbe = new ProbeBuilder()
         .withHttpGet(new HTTPGetActionBuilder()
-            .withPath("/readyz")
+            .withPath(spec.getReadinessPath())
             .withPort(new IntOrString(spec.getContainerPort()))
             .build())
         .withInitialDelaySeconds(5)

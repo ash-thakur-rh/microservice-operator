@@ -46,7 +46,7 @@ All owned resources are garbage-collected automatically when the `MicroService` 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  User                                                        │
-│  kubectl apply -f podinfo-demo.yaml                          │
+│  kubectl apply -f petclinic-rest.yaml                        │
 └──────────────────────┬──────────────────────────────────────┘
                        │  MicroService CR
                        ▼
@@ -182,30 +182,40 @@ The `Ingress` is deleted automatically.
 apiVersion: example.io/v1
 kind: MicroService
 metadata:
-  name: podinfo-demo           # becomes the name of all owned resources
-  namespace: default
+  name: petclinic-rest         # becomes the name of all owned resources
+  namespace: production
 spec:
 
   # ── Required ──────────────────────────────────────────────
-  # podinfo — real open-source microservice demo (https://github.com/stefanprodan/podinfo)
-  # Port 9898, liveness: GET /healthz, readiness: GET /readyz
-  image: ghcr.io/stefanprodan/podinfo:latest   # container image
+  # Spring PetClinic REST API — real Spring Boot microservice by the Spring community.
+  # Docker Hub: https://hub.docker.com/r/springcommunity/spring-petclinic-rest
+  image: docker.io/springcommunity/spring-petclinic-rest:latest
 
   # ── Scaling ───────────────────────────────────────────────
   replicas: 2                  # desired replicas (ignored by HPA when autoscaling is set)
                                # default: 1
 
   # ── Networking ────────────────────────────────────────────
-  containerPort: 9898          # podinfo's port; nginx uses 80; default spec value is 8080
+  containerPort: 9966          # Spring PetClinic REST listens on 9966 by default
 
   exposed: true                # create Ingress/Route; default: false
-  hostname: payment.apps.cluster.example.com   # optional; auto-derived when omitted
+  hostname: petclinic-api.apps.cluster.example.com   # optional; auto-derived when omitted
+
+  # ── Health probes ─────────────────────────────────────────
+  # Override these to match your microservice framework:
+  #   Spring Boot Actuator : /actuator/health/liveness  /actuator/health/readiness (default)
+  #   Quarkus              : /q/health/live              /q/health/ready
+  #   Micronaut            : /health/live                /health/ready
+  #   Vert.x / generic     : /healthz                   /readyz
+  livenessPath: /actuator/health/liveness    # default
+  readinessPath: /actuator/health/readiness  # default
 
   # ── Application config ────────────────────────────────────
   # Mounted into the container as environment variables via a ConfigMap.
+  # Spring Boot reads SPRING_* and SERVER_* env vars automatically.
   config:
-    LOG_LEVEL: INFO
-    JAVA_OPTS: "-Xms256m -Xmx512m"
+    SPRING_PROFILES_ACTIVE: production
+    LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: WARN
     DB_URL: "jdbc:postgresql://postgres:5432/payments"
 
   # ── Secrets ───────────────────────────────────────────────
@@ -232,25 +242,37 @@ spec:
   # ── Labels ────────────────────────────────────────────────
   # Merged onto all owned resources (Deployment, Service, ConfigMap, HPA, Ingress).
   extraLabels:
-    team: payments
-    cost-center: "cc-42"
+    team: backend
+    cost-center: "cc-11"
     environment: production
 ```
 
 ### Field defaults summary
 
-| Field | Default |
-|-------|---------|
-| `replicas` | `1` |
-| `containerPort` | `8080` |
-| `exposed` | `false` |
-| `resources.requestsCpu` | `100m` |
-| `resources.requestsMemory` | `128Mi` |
-| `resources.limitsCpu` | `500m` |
-| `resources.limitsMemory` | `512Mi` |
-| `autoscaling.minReplicas` | `1` |
-| `autoscaling.maxReplicas` | `5` |
-| `autoscaling.targetCPUUtilizationPercentage` | `70` |
+| Field | Default | Notes |
+|-------|---------|-------|
+| `replicas` | `1` | Ignored by HPA when `autoscaling` is set |
+| `containerPort` | `8080` | |
+| `exposed` | `false` | |
+| `livenessPath` | `/actuator/health/liveness` | Spring Boot Actuator default |
+| `readinessPath` | `/actuator/health/readiness` | Spring Boot Actuator default |
+| `resources.requestsCpu` | `100m` | |
+| `resources.requestsMemory` | `128Mi` | |
+| `resources.limitsCpu` | `500m` | |
+| `resources.limitsMemory` | `512Mi` | |
+| `autoscaling.minReplicas` | `1` | |
+| `autoscaling.maxReplicas` | `5` | |
+| `autoscaling.targetCPUUtilizationPercentage` | `70` | |
+
+### Probe path reference for common Java frameworks
+
+| Framework | `livenessPath` | `readinessPath` |
+|-----------|----------------|-----------------|
+| **Spring Boot Actuator** (default) | `/actuator/health/liveness` | `/actuator/health/readiness` |
+| **Quarkus** | `/q/health/live` | `/q/health/ready` |
+| **Micronaut** | `/health/live` | `/health/ready` |
+| **Vert.x / generic** | `/healthz` | `/readyz` |
+| **Helidon** | `/health/live` | `/health/ready` |
 
 ---
 
@@ -260,8 +282,8 @@ spec:
 status:
   phase: RUNNING            # PENDING | RUNNING | DEGRADED | ERROR
   readyReplicas: 2          # ready pods observed in the Deployment
-  url: "http://podinfo.apps.cluster.example.com"   # populated when exposed=true
-  configMapName: podinfo-demo-config
+  url: "http://petclinic-api.apps.cluster.example.com"   # populated when exposed=true
+  configMapName: petclinic-rest-config
   message: "All replicas are ready"
   observedGeneration: 3     # CR generation when this status was last written
 ```
@@ -348,7 +370,7 @@ kubectl -n microservice-operator-system logs -f deploy/microservice-operator
 kubectl get microservice -A
 
 # Inspect all resources created for a CR
-kubectl get all,ingress,configmap,hpa -l app=podinfo-demo -n default
+kubectl get all,ingress,configmap,hpa -l app=petclinic-rest -n production
 ```
 
 ---

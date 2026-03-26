@@ -45,6 +45,22 @@ public class MicroServiceSpec {
   /** Optional list of secrets to mount as environment variables (secretRef). */
   private List<String> envFromSecrets;
 
+  /**
+   * HTTP path for the liveness probe.
+   * Default suits Spring Boot Actuator. Override for other frameworks:
+   *   Quarkus / Micronaut / podinfo : /q/health/live  (Quarkus), /health/live (Micronaut)
+   *   Vert.x / Node.js health-check : /healthz
+   */
+  private String livenessPath = "/actuator/health/liveness";
+
+  /**
+   * HTTP path for the readiness probe.
+   * Default suits Spring Boot Actuator. Override for other frameworks:
+   *   Quarkus / Micronaut / podinfo : /q/health/ready (Quarkus), /health/ready (Micronaut)
+   *   Vert.x / Node.js health-check : /readyz
+   */
+  private String readinessPath = "/actuator/health/readiness";
+
   // --- Getters / Setters ---
 
   public String getImage() { return image; }
@@ -76,4 +92,10 @@ public class MicroServiceSpec {
 
   public List<String> getEnvFromSecrets() { return envFromSecrets; }
   public void setEnvFromSecrets(List<String> envFromSecrets) { this.envFromSecrets = envFromSecrets; }
+
+  public String getLivenessPath() { return livenessPath; }
+  public void setLivenessPath(String livenessPath) { this.livenessPath = livenessPath; }
+
+  public String getReadinessPath() { return readinessPath; }
+  public void setReadinessPath(String readinessPath) { this.readinessPath = readinessPath; }
 }

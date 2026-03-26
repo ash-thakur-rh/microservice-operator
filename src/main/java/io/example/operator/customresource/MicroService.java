@@ -15,28 +15,30 @@ import io.fabric8.kubernetes.model.annotation.Version;
  * apiVersion: example.io/v1
  * kind: MicroService
  * metadata:
- *   name: podinfo-demo
- *   namespace: default
+ *   name: petclinic-rest
+ *   namespace: production
  * spec:
- *   image: ghcr.io/stefanprodan/podinfo:latest
+ *   image: docker.io/springcommunity/spring-petclinic-rest:latest
  *   replicas: 2
- *   containerPort: 9898
+ *   containerPort: 9966
+ *   livenessPath: /actuator/health/liveness
+ *   readinessPath: /actuator/health/readiness
  *   config:
- *     PODINFO_UI_COLOR: "#336699"
- *     PODINFO_UI_MESSAGE: "Hello from MicroService Operator"
+ *     SPRING_PROFILES_ACTIVE: production
+ *     LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: WARN
  *   autoscaling:
  *     minReplicas: 2
- *     maxReplicas: 10
- *     targetCPUUtilizationPercentage: 60
+ *     maxReplicas: 8
+ *     targetCPUUtilizationPercentage: 65
  *   exposed: true
- *   hostname: podinfo.apps.mycluster.example.com
+ *   hostname: petclinic-api.apps.mycluster.example.com
  *   resources:
- *     requestsCpu: "100m"
- *     requestsMemory: "64Mi"
- *     limitsCpu: "500m"
- *     limitsMemory: "128Mi"
+ *     requestsCpu: "250m"
+ *     requestsMemory: "512Mi"
+ *     limitsCpu: "1"
+ *     limitsMemory: "1Gi"
  *   envFromSecrets:
- *     - podinfo-token
+ *     - petclinic-db-credentials
  * </pre>
  */
 @Group("example.io")

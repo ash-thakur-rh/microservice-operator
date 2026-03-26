@@ -1,63 +1,72 @@
 ---
-# Example 1 — minimal: just an image, operator supplies sensible defaults
+# Example 1 — Spring PetClinic REST API (minimal config)
+# A real Spring Boot microservice maintained by the Spring community.
+# Docker Hub: https://hub.docker.com/r/springcommunity/spring-petclinic-rest
+# Port: 9966 | Health: Spring Boot Actuator (/actuator/health/liveness, /actuator/health/readiness)
 apiVersion: example.io/v1
 kind: MicroService
 metadata:
-  name: hello-service
+  name: petclinic-rest
   namespace: default
 spec:
-  # nginx:latest — official Docker Hub image, always available
-  image: nginx:latest
+  image: docker.io/springcommunity/spring-petclinic-rest:latest
   replicas: 1
-  containerPort: 80
+  containerPort: 9966
+  # Spring Boot Actuator paths are the default, so no need to set livenessPath/readinessPath here.
 
 ---
-# Example 2 — full-featured: autoscaling, external exposure, secrets, resource limits
+# Example 2 — Spring PetClinic REST API (full-featured)
+# Same image, now with autoscaling, external exposure, config, secrets, and resource limits.
 apiVersion: example.io/v1
 kind: MicroService
 metadata:
-  name: payment-service
+  name: petclinic-rest-prod
   namespace: production
 spec:
-  # podinfo — a real open-source microservice demo by Stefan Prodan, widely used in K8s demos.
-  # Repo: https://github.com/stefanprodan/podinfo
-  # Port: 9898  Health: GET /healthz  Ready: GET /readyz  UI: GET /
-  image: ghcr.io/stefanprodan/podinfo:latest
+  image: docker.io/springcommunity/spring-petclinic-rest:latest
   replicas: 2
-  containerPort: 9898
+  containerPort: 9966
 
-  # Key/value app config mounted into the container as env vars via a ConfigMap.
-  # podinfo reads PODINFO_* env vars natively; other keys are passed through.
+  # Spring Boot Actuator health paths (defaults — shown here explicitly for clarity)
+  livenessPath: /actuator/health/liveness
+  readinessPath: /actuator/health/readiness
+
+  # Key/value config injected as environment variables via a ConfigMap.
+  # Spring Boot reads SPRING_* and SERVER_* env vars automatically.
   config:
-    PODINFO_UI_COLOR: "#336699"
-    PODINFO_UI_MESSAGE: "Hello from MicroService Operator"
-    LOG_LEVEL: info
-    CACHE_TTL_SECONDS: "300"
+    SPRING_PROFILES_ACTIVE: production
+    SERVER_SERVLET_CONTEXT_PATH: /
+    SPRING_JPA_OPEN_IN_VIEW: "false"
+    LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: WARN
 
-  # Horizontal Pod Autoscaler — scales between 2–10 pods when CPU hits 60 %
+  # HPA: scale between 2–8 pods when average CPU exceeds 65 %
   autoscaling:
     minReplicas: 2
-    maxReplicas: 10
-    targetCPUUtilizationPercentage: 60
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 65
 
-  # Expose the service through an Ingress (or Route on OpenShift)
+  # Create an Ingress so the REST API is reachable outside the cluster
   exposed: true
-  hostname: payment.apps.mycluster.example.com
+  hostname: petclinic-api.apps.mycluster.example.com
 
-  # Resource sizing
+  # Typical sizing for a Spring Boot microservice
   resources:
     requestsCpu: "250m"
-    requestsMemory: "256Mi"
+    requestsMemory: "512Mi"
     limitsCpu: "1"
     limitsMemory: "1Gi"
 
-  # Secrets injected as environment variables (must exist in the same namespace before applying).
-  # To create test secrets: kubectl create secret generic podinfo-token --from-literal=TOKEN=abc123
+  # Existing secrets injected as env vars (create before applying this CR):
+  #   kubectl create secret generic petclinic-db-credentials \
+  #     --from-literal=SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/petclinic \
+  #     --from-literal=SPRING_DATASOURCE_USERNAME=petclinic \
+  #     --from-literal=SPRING_DATASOURCE_PASSWORD=s3cr3t
   envFromSecrets:
-    - podinfo-token
+    - petclinic-db-credentials
 
-  # Extra labels applied to all owned resources (useful for cost allocation, etc.)
+  # Extra labels for cost allocation and GitOps tooling
   extraLabels:
-    team: payments
-    cost-center: "cc-42"
+    team: backend
+    cost-center: "cc-11"
     environment: production
+    app.kubernetes.io/part-of: petclinic
