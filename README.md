@@ -494,37 +494,127 @@ kubectl apply -f k8s/operator.yaml
 
 ## Building the Container Image
 
-The project uses [Jib](https://github.com/GoogleContainerTools/jib) — no `Dockerfile` needed.
+The project uses [Eclipse JKube](https://www.eclipse.org/jkube/) — **no Dockerfile needed**.
+JKube's built-in Java generator detects the executable fat JAR produced by `maven-shade-plugin`,
+selects an appropriate base image (`eclipse-temurin:17-jre-alpine` for Kubernetes,
+`ubi8/openjdk-17` for OpenShift S2I), and wires up the entrypoint automatically.
 
-### Build to local Docker daemon (for testing)
+There are two plugin goals depending on your target platform:
+
+| Plugin goal | Where image is built | Docker daemon needed? |
+|---|---|---|
+| `k8s:build` | Local Docker daemon | Yes |
+| `k8s:push` | Pushes to remote registry | Yes |
+| `oc:build` | Inside OpenShift (S2I binary build) | **No** |
+| `oc:push` | OpenShift internal registry | No |
+
+---
+
+### Option A — Kubernetes (Docker build)
+
+Requires Docker (or Podman in Docker-compat mode) running locally.
+
+#### 1. Build the fat JAR and image
 
 ```bash
-mvn clean package jib:dockerBuild -DskipTests
-docker run --rm microservice-operator:latest
+mvn clean package k8s:build -DskipTests
 ```
 
-### Build and push to a registry
+JKube reads the `<image>` configuration in pom.xml, copies the fat JAR into
+`eclipse-temurin:17-jre-alpine`, and tags it as `microservice-operator:1.0.0-SNAPSHOT`.
+
+#### 2. Push to a registry
 
 ```bash
 # Quay.io
-mvn clean package jib:build -DskipTests \
-  -Dimage=quay.io/yourorg/microservice-operator:1.0.0
+mvn package k8s:build k8s:push -DskipTests \
+  -Djkube.image.name=quay.io/yourorg/microservice-operator:1.0.0
 
 # Docker Hub
-mvn clean package jib:build -DskipTests \
-  -Dimage=docker.io/yourorg/microservice-operator:1.0.0
-
-# OpenShift internal registry
-mvn clean package jib:build -DskipTests \
-  -Dimage=image-registry.openshift-image-registry.svc:5000/microservice-operator-system/microservice-operator:1.0.0
+mvn package k8s:build k8s:push -DskipTests \
+  -Djkube.image.name=docker.io/yourorg/microservice-operator:1.0.0
 ```
 
-### Multi-arch image (amd64 + arm64)
+Log in to the registry before pushing:
 
 ```bash
-mvn clean package jib:build -DskipTests \
-  -Dimage=quay.io/yourorg/microservice-operator:1.0.0 \
-  -Djib.from.platforms=linux/amd64,linux/arm64
+docker login quay.io          # Quay.io
+docker login                  # Docker Hub
+```
+
+#### 3. (Optional) Build + generate manifests + deploy in one shot
+
+```bash
+mvn package k8s:build k8s:resource k8s:apply -DskipTests \
+  -Djkube.image.name=quay.io/yourorg/microservice-operator:1.0.0
+```
+
+---
+
+### Option B — OpenShift (S2I binary build — no Docker daemon)
+
+OpenShift has a built-in build system. JKube's `oc:build` uploads the fat JAR to an
+OpenShift `BuildConfig` and the build runs entirely server-side — no Docker needed on
+the developer's machine. This is the recommended approach for OpenShift deployments.
+
+#### Prerequisites
+
+```bash
+# Log in to your OpenShift cluster
+oc login --token=<token> --server=https://api.cluster.example.com:6443
+
+# Create (or switch to) the operator namespace
+oc new-project microservice-operator-system
+```
+
+#### 1. Build the fat JAR and trigger an S2I build on OpenShift
+
+```bash
+mvn clean package oc:build -DskipTests \
+  -Djkube.image.name=microservice-operator:1.0.0
+```
+
+JKube:
+1. Creates a `BuildConfig` in the current namespace
+2. Uploads `target/microservice-operator-*.jar` as a binary input
+3. OpenShift builds the image using `ubi8/openjdk-17` and pushes it to the internal registry
+
+#### 2. Generate OpenShift manifests and deploy
+
+```bash
+mvn oc:resource oc:apply
+```
+
+This generates a `DeploymentConfig` (or `Deployment`), `Service`, and `ServiceAccount`
+in `target/classes/META-INF/jkube/openshift/` and applies them to the cluster.
+
+#### 3. All-in-one OpenShift workflow
+
+```bash
+mvn clean package oc:build oc:resource oc:apply -DskipTests \
+  -Djkube.image.name=microservice-operator:1.0.0
+```
+
+---
+
+### What `mvn package` produces
+
+```
+target/
+├── microservice-operator-1.0.0-SNAPSHOT.jar        ← executable fat JAR (all deps bundled)
+└── classes/
+    └── META-INF/
+        └── fabric8/
+            └── microservices.example.io-v1.yml     ← CRD (apply this to the cluster first)
+```
+
+The fat JAR is created by `maven-shade-plugin` — it includes all dependencies, sets
+`Main-Class: io.example.operator.MicroServiceOperator` in the manifest, and replaces
+the original thin JAR. You can verify it runs standalone:
+
+```bash
+mvn clean package -DskipTests
+java -jar target/microservice-operator-1.0.0-SNAPSHOT.jar
 ```
 
 ---

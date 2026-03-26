@@ -11,8 +11,9 @@
 
   <name>Microservice Operator</name>
   <description>
-    A real-world Kubernetes/OpenShift Operator that manages a full microservice stack:
-    Deployment, Service, ConfigMap, HPA, and Ingress/Route — all from a single MicroService CR.
+    A real-world Kubernetes/OpenShift Operator built with Java Operator SDK.
+    Manages a full microservice application stack (Deployment, Service, ConfigMap,
+    HPA, Ingress, PostgreSQL StatefulSet) from a single MicroService CR.
   </description>
 
   <properties>
@@ -20,10 +21,23 @@
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
+    <!-- Dependency versions -->
     <josdk.version>5.3.2</josdk.version>
     <fabric8-client.version>7.6.1</fabric8-client.version>
     <log4j.version>2.25.3</log4j.version>
-    <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
+
+    <!-- Plugin versions -->
+    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+    <jkube.version>1.17.0</jkube.version>
+
+    <!--
+      Image name used by both kubernetes-maven-plugin and openshift-maven-plugin.
+      Override on the CLI:
+        mvn package k8s:build k8s:push -Djkube.image.name=quay.io/myorg/microservice-operator:1.0.0
+      Or set registry + name separately:
+        mvn package k8s:build -Djkube.registry=quay.io/myorg
+    -->
+    <jkube.image.name>microservice-operator:${project.version}</jkube.image.name>
   </properties>
 
   <dependencyManagement>
@@ -73,6 +87,7 @@
 
   <build>
     <plugins>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -82,7 +97,7 @@
         </configuration>
       </plugin>
 
-      <!-- Generate CRD from annotations at build time -->
+      <!-- Generate CRD YAML from @Group / @Version annotations -->
       <plugin>
         <groupId>io.fabric8</groupId>
         <artifactId>crd-generator-maven-plugin</artifactId>
@@ -96,25 +111,165 @@
         </executions>
       </plugin>
 
-      <!-- Build and push container image -->
+      <!--
+        Shade plugin — produces a single executable "fat JAR" that bundles all dependencies.
+        The shaded JAR is what both the Dockerfile and JKube copy into the image.
+        Output: target/microservice-operator-<version>.jar  (replaces the thin jar)
+      -->
       <plugin>
-        <groupId>com.google.cloud.tools</groupId>
-        <artifactId>jib-maven-plugin</artifactId>
-        <version>${jib-maven-plugin.version}</version>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${maven-shade-plugin.version}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <!-- Replace the original jar so JKube picks up the fat jar automatically -->
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <!-- Set the Main-Class manifest entry -->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>io.example.operator.MicroServiceOperator</mainClass>
+                </transformer>
+                <!-- Merge META-INF/services files (required for Fabric8 serializers) -->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <!-- Merge NOTICE / LICENSE files to avoid conflicts -->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                  <addHeader>false</addHeader>
+                </transformer>
+              </transformers>
+              <filters>
+                <!-- Drop module-info and signature files that break shading -->
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>module-info.class</exclude>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Eclipse JKube — Kubernetes image build and resource generation.
+
+        Build image (requires Docker daemon or remote Docker):
+          mvn package k8s:build
+
+        Push image to registry:
+          mvn package k8s:build k8s:push -Djkube.image.name=quay.io/myorg/microservice-operator:1.0.0
+
+        Generate K8s manifests (Deployment, Service, etc.):
+          mvn k8s:resource
+
+        Deploy directly to connected cluster:
+          mvn package k8s:build k8s:resource k8s:apply
+      -->
+      <!--
+        Eclipse JKube — Kubernetes image build and resource generation.
+        JKube's Java generator auto-detects the fat JAR produced by maven-shade-plugin
+        and builds a proper layered image — no Dockerfile required.
+
+        Build image locally (requires Docker daemon):
+          mvn package k8s:build
+
+        Push to a registry:
+          mvn package k8s:build k8s:push \
+            -Djkube.image.name=quay.io/myorg/microservice-operator:1.0.0
+
+        Generate Kubernetes manifests into target/classes/META-INF/jkube/:
+          mvn k8s:resource
+
+        One-shot: build image, generate manifests, apply to connected cluster:
+          mvn package k8s:build k8s:resource k8s:apply
+      -->
+      <plugin>
+        <groupId>org.eclipse.jkube</groupId>
+        <artifactId>kubernetes-maven-plugin</artifactId>
+        <version>${jkube.version}</version>
         <configuration>
-          <from>
-            <image>gcr.io/distroless/java17-debian11</image>
-          </from>
-          <to>
-            <!-- Override with: mvn jib:build -Dimage=registry/repo/microservice-operator:tag -->
-            <image>microservice-operator:latest</image>
-          </to>
-          <container>
-            <mainClass>io.example.operator.MicroServiceOperator</mainClass>
-            <ports>
-              <port>8080</port>
-            </ports>
-          </container>
+          <images>
+            <image>
+              <name>${jkube.image.name}</name>
+              <build>
+                <!--
+                  No Dockerfile needed.
+                  JKube's built-in 'java' generator detects the executable fat JAR
+                  (from maven-shade-plugin), picks eclipse-temurin:17 as the base,
+                  copies the JAR to /deployments, and sets the correct entrypoint.
+                -->
+                <from>eclipse-temurin:17-jre-alpine</from>
+                <assembly>
+                  <!-- 'artifact' copies the project's main artifact (the shaded fat JAR) -->
+                  <targetDir>/deployments</targetDir>
+                  <descriptorRef>artifact</descriptorRef>
+                </assembly>
+                <env>
+                  <JAVA_APP_JAR>${project.artifactId}-${project.version}.jar</JAVA_APP_JAR>
+                  <!-- Use /dev/urandom to avoid slow SecureRandom startup on Linux -->
+                  <JAVA_OPTS>-Djava.security.egd=file:/dev/./urandom -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0</JAVA_OPTS>
+                </env>
+                <ports>
+                  <port>8080</port>
+                </ports>
+                <!-- Run as non-root (uid 1000) — compatible with OpenShift restricted SCC -->
+                <user>1000</user>
+              </build>
+            </image>
+          </images>
+        </configuration>
+      </plugin>
+
+      <!--
+        Eclipse JKube — OpenShift image build via S2I (no local Docker daemon needed).
+
+        On OpenShift the build runs server-side using a binary S2I build —
+        the fat JAR is uploaded to the cluster and built inside an OpenShift Build pod.
+
+        Build and push to OpenShift internal registry:
+          mvn package oc:build
+
+        Deploy to OpenShift:
+          mvn package oc:build oc:resource oc:apply
+      -->
+      <plugin>
+        <groupId>org.eclipse.jkube</groupId>
+        <artifactId>openshift-maven-plugin</artifactId>
+        <version>${jkube.version}</version>
+        <configuration>
+          <images>
+            <image>
+              <name>${jkube.image.name}</name>
+              <build>
+                <!--
+                  OpenShift S2I binary build:
+                  JKube uploads the fat JAR; OpenShift uses the java S2I base image
+                  (ubi8/openjdk-17) to produce the final image without a Dockerfile.
+                -->
+                <from>registry.access.redhat.com/ubi8/openjdk-17:latest</from>
+                <assembly>
+                  <targetDir>/deployments</targetDir>
+                  <descriptorRef>artifact</descriptorRef>
+                </assembly>
+                <env>
+                  <JAVA_APP_JAR>${project.artifactId}-${project.version}.jar</JAVA_APP_JAR>
+                  <JAVA_OPTS>-Djava.security.egd=file:/dev/./urandom</JAVA_OPTS>
+                </env>
+                <ports>
+                  <port>8080</port>
+                </ports>
+              </build>
+            </image>
+          </images>
         </configuration>
       </plugin>
 
@@ -123,6 +278,8 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.3.1</version>
       </plugin>
+
     </plugins>
   </build>
+
 </project>
