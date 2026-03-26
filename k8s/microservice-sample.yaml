@@ -76,7 +76,7 @@ spec:
     targetCPUUtilizationPercentage: 65
 
   exposed: true
-  hostname: petclinic.apps.mycluster.example.com
+  hostname: petclinic.apps.apps-crc.testing
 
   resources:
     requestsCpu: "250m"
