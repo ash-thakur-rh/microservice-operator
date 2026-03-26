@@ -46,7 +46,7 @@ All owned resources are garbage-collected automatically when the `MicroService` 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  User                                                        │
-│  kubectl apply -f payment-service.yaml                       │
+│  kubectl apply -f podinfo-demo.yaml                          │
 └──────────────────────┬──────────────────────────────────────┘
                        │  MicroService CR
                        ▼
@@ -182,19 +182,21 @@ The `Ingress` is deleted automatically.
 apiVersion: example.io/v1
 kind: MicroService
 metadata:
-  name: payment-service        # becomes the name of all owned resources
-  namespace: production
+  name: podinfo-demo           # becomes the name of all owned resources
+  namespace: default
 spec:
 
   # ── Required ──────────────────────────────────────────────
-  image: quay.io/acme/payment-service:2.1.0   # container image
+  # podinfo — real open-source microservice demo (https://github.com/stefanprodan/podinfo)
+  # Port 9898, liveness: GET /healthz, readiness: GET /readyz
+  image: ghcr.io/stefanprodan/podinfo:latest   # container image
 
   # ── Scaling ───────────────────────────────────────────────
   replicas: 2                  # desired replicas (ignored by HPA when autoscaling is set)
                                # default: 1
 
   # ── Networking ────────────────────────────────────────────
-  containerPort: 8080          # port the container listens on; default: 8080
+  containerPort: 9898          # podinfo's port; nginx uses 80; default spec value is 8080
 
   exposed: true                # create Ingress/Route; default: false
   hostname: payment.apps.cluster.example.com   # optional; auto-derived when omitted
@@ -258,8 +260,8 @@ spec:
 status:
   phase: RUNNING            # PENDING | RUNNING | DEGRADED | ERROR
   readyReplicas: 2          # ready pods observed in the Deployment
-  url: "http://payment.apps.cluster.example.com"   # populated when exposed=true
-  configMapName: payment-service-config
+  url: "http://podinfo.apps.cluster.example.com"   # populated when exposed=true
+  configMapName: podinfo-demo-config
   message: "All replicas are ready"
   observedGeneration: 3     # CR generation when this status was last written
 ```
@@ -346,7 +348,7 @@ kubectl -n microservice-operator-system logs -f deploy/microservice-operator
 kubectl get microservice -A
 
 # Inspect all resources created for a CR
-kubectl get all,ingress,configmap,hpa -l app=payment-service -n production
+kubectl get all,ingress,configmap,hpa -l app=podinfo-demo -n default
 ```
 
 ---

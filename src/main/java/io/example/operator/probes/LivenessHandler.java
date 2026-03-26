@@ -22,7 +22,7 @@ public class LivenessHandler implements HttpHandler {
     if (operator.getRuntimeInfo().allEventSourcesAreHealthy()) {
       respond(exchange, 200, "healthy");
     } else {
-      respond(exchange, 503, "unhealthy — an event source is not running");
+      respond(exchange, 503, "unhealthy - an event source is not running");
     }
   }
 }

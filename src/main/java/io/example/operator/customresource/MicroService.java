@@ -15,28 +15,28 @@ import io.fabric8.kubernetes.model.annotation.Version;
  * apiVersion: example.io/v1
  * kind: MicroService
  * metadata:
- *   name: payment-service
- *   namespace: production
+ *   name: podinfo-demo
+ *   namespace: default
  * spec:
- *   image: quay.io/acme/payment-service:2.1.0
+ *   image: ghcr.io/stefanprodan/podinfo:latest
  *   replicas: 2
- *   containerPort: 8080
+ *   containerPort: 9898
  *   config:
- *     LOG_LEVEL: INFO
- *     DB_URL: jdbc:postgresql://postgres:5432/payments
+ *     PODINFO_UI_COLOR: "#336699"
+ *     PODINFO_UI_MESSAGE: "Hello from MicroService Operator"
  *   autoscaling:
  *     minReplicas: 2
  *     maxReplicas: 10
  *     targetCPUUtilizationPercentage: 60
  *   exposed: true
- *   hostname: payment.apps.mycluster.example.com
+ *   hostname: podinfo.apps.mycluster.example.com
  *   resources:
- *     requestsCpu: "250m"
- *     requestsMemory: "256Mi"
- *     limitsCpu: "1000m"
- *     limitsMemory: "1Gi"
+ *     requestsCpu: "100m"
+ *     requestsMemory: "64Mi"
+ *     limitsCpu: "500m"
+ *     limitsMemory: "128Mi"
  *   envFromSecrets:
- *     - payment-db-credentials
+ *     - podinfo-token
  * </pre>
  */
 @Group("example.io")

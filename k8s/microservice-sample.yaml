@@ -6,9 +6,10 @@ metadata:
   name: hello-service
   namespace: default
 spec:
-  image: quay.io/bitnami/nginx:latest
+  # nginx:latest — official Docker Hub image, always available
+  image: nginx:latest
   replicas: 1
-  containerPort: 8080
+  containerPort: 80
 
 ---
 # Example 2 — full-featured: autoscaling, external exposure, secrets, resource limits
@@ -18,15 +19,19 @@ metadata:
   name: payment-service
   namespace: production
 spec:
-  image: quay.io/acme/payment-service:2.1.0
+  # podinfo — a real open-source microservice demo by Stefan Prodan, widely used in K8s demos.
+  # Repo: https://github.com/stefanprodan/podinfo
+  # Port: 9898  Health: GET /healthz  Ready: GET /readyz  UI: GET /
+  image: ghcr.io/stefanprodan/podinfo:latest
   replicas: 2
-  containerPort: 8080
+  containerPort: 9898
 
-  # Key/value app config mounted into the container as env vars via a ConfigMap
+  # Key/value app config mounted into the container as env vars via a ConfigMap.
+  # podinfo reads PODINFO_* env vars natively; other keys are passed through.
   config:
-    LOG_LEVEL: INFO
-    JAVA_OPTS: "-Xms256m -Xmx512m"
-    DB_URL: "jdbc:postgresql://postgres.production.svc.cluster.local:5432/payments"
+    PODINFO_UI_COLOR: "#336699"
+    PODINFO_UI_MESSAGE: "Hello from MicroService Operator"
+    LOG_LEVEL: info
     CACHE_TTL_SECONDS: "300"
 
   # Horizontal Pod Autoscaler — scales between 2–10 pods when CPU hits 60 %
@@ -46,10 +51,10 @@ spec:
     limitsCpu: "1"
     limitsMemory: "1Gi"
 
-  # Secrets injected as environment variables (must exist in the same namespace)
+  # Secrets injected as environment variables (must exist in the same namespace before applying).
+  # To create test secrets: kubectl create secret generic podinfo-token --from-literal=TOKEN=abc123
   envFromSecrets:
-    - payment-db-credentials
-    - payment-jwt-secret
+    - podinfo-token
 
   # Extra labels applied to all owned resources (useful for cost allocation, etc.)
   extraLabels:
