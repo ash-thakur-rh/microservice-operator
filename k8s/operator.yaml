@@ -37,7 +37,7 @@ rules:
     verbs: ["*"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
   # OpenShift Route support
   - apiGroups: ["route.openshift.io"]
     resources: ["routes"]
